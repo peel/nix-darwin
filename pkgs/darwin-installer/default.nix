@@ -24,6 +24,8 @@ stdenv.mkDerivation {
   shellHook = ''
     set -e
 
+    export PATH=/nix/var/nix/profiles/default/bin:${nix}/bin:${pkgs.openssh}/bin:/usr/bin:/bin:/usr/sbin:/sbin
+
     action=switch
     while [ "$#" -gt 0 ]; do
         i="$1"; shift 1
@@ -42,13 +44,12 @@ stdenv.mkDerivation {
     echo >&2 "Installing nix-darwin..."
     echo >&2
 
-    export nix=${nix}
-
     config=$(nix-instantiate --eval -E '<darwin-config>' 2> /dev/null || echo "$HOME/.nixpkgs/darwin-configuration.nix")
     if ! test -f "$config"; then
         echo "copying example configuration.nix" >&2
         mkdir -p "$HOME/.nixpkgs"
         cp "${toString ../../modules/examples/simple.nix}" "$config"
+        chmod u+w "$config"
     fi
 
     # Skip when stdin is not a tty, eg.
@@ -63,9 +64,9 @@ stdenv.mkDerivation {
     fi
 
     export NIX_PATH=${nixPath}
-    system=$($nix/bin/nix-build '<darwin>' -I "user-darwin-config=$config" -A system --no-out-link)
-    export PATH=$system/sw/bin:$PATH
+    system=$(nix-build '<darwin>' -I "user-darwin-config=$config" -A system --no-out-link)
 
+    export PATH=$system/sw/bin:$PATH
     darwin-rebuild "$action" -I "user-darwin-config=$config"
 
     echo >&2

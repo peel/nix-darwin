@@ -1,4 +1,5 @@
 { config, lib, pkgs, ... }:
+
 {
   system.defaults.NSGlobalDomain.AppleKeyboardUIMode = 3;
   system.defaults.NSGlobalDomain.ApplePressAndHoldEnabled = false;
@@ -28,9 +29,15 @@
   system.keyboard.remapCapsLockToControl = true;
 
   environment.systemPackages =
-    [ pkgs.brotli
+    [ config.programs.vim.package
+      config.services.chunkwm.package
+
+      pkgs.bear
+      pkgs.brotli
+      pkgs.cachix
       pkgs.ctags
       pkgs.curl
+      pkgs.direnv
       pkgs.fzf
       pkgs.gettext
       pkgs.git
@@ -41,25 +48,26 @@
       pkgs.ripgrep
       pkgs.shellcheck
       pkgs.silver-searcher
+      pkgs.vault
 
-      pkgs.khd
-      pkgs.kwm
-
-      pkgs.nix-repl
+      pkgs.qes
+      pkgs.darwin-zsh-completions
     ];
 
+  services.chunkwm.enable = true;
   services.khd.enable = true;
-  services.kwm.enable = true;
+  services.skhd.enable = true;
 
   launchd.user.agents.fetch-nixpkgs = {
-    command = "${pkgs.git}/bin/git -C ~/.nix-defexpr/nixpkgs fetch origin master";
-    environment.GIT_SSL_CAINFO = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
+    command = "${pkgs.git}/bin/git -C /src/nixpkgs fetch origin master";
+    environment.SSL_CERT_FILE = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
     serviceConfig.KeepAlive = false;
     serviceConfig.ProcessType = "Background";
     serviceConfig.StartInterval = 360;
   };
 
   services.nix-daemon.enable = true;
+  services.nix-daemon.enableSocketListener = true;
 
   nix.extraOptions = ''
     gc-keep-derivations = true
@@ -81,115 +89,60 @@
   programs.tmux.enableVim = true;
 
   programs.tmux.tmuxConfig = ''
-    bind-key -n M-r run "tmux send-keys -t .+ C-l Up Enter"
-    bind-key -n M-R run "tmux send-keys -t $(hostname -s | awk -F'-' '{print tolower($NF)}') C-l Up Enter"
-
     bind 0 set status
     bind S choose-session
 
     bind-key -r "<" swap-window -t -1
     bind-key -r ">" swap-window -t +1
 
+    bind-key -n M-r run "tmux send-keys -t .+ C-l Up Enter"
+    bind-key -n M-R run "tmux send-keys -t $(hostname -s | awk -F'-' '{print tolower($NF)}') C-l Up Enter"
+
+    set -g pane-active-border-style fg=black
+    set -g pane-border-style fg=black
     set -g status-bg black
     set -g status-fg white
+    set -g status-right '#[fg=white]#(id -un)@#(hostname)   #(cat /run/current-system/darwin-version)'
   '';
 
-  programs.vim.enable = true;
-  programs.vim.enableSensible = true;
+  # programs.vim.enable = true;
+  # programs.vim.enableSensible = true;
+  programs.vim.package = pkgs.vim_configurable.customize {
+    name = "vim";
+    vimrcConfig.packages.darwin.start = with pkgs.vimPlugins; [
+      vim-sensible vim-surround ReplaceWithRegister
+      polyglot fzfWrapper YouCompleteMe ale
+    ];
+    vimrcConfig.packages.darwin.opt = with pkgs.vimPlugins; [
+      colors-solarized
+      splice-vim
+    ];
+    vimrcConfig.customRC = ''
+      set completeopt=menuone
+      set encoding=utf-8
+      set hlsearch
+      set list
+      set number
+      set showcmd
+      set splitright
 
-  programs.vim.plugins = [
-    { names = [ "ReplaceWithRegister" "vim-indent-object" "vim-sort-motion" ]; }
-    { names = [ "ale" "vim-gitgutter" "vim-dispatch" ]; }
-    { names = [ "commentary" "vim-eunuch" "repeat" "tabular" ]; }
-    { names = [ "fzfWrapper" "fzf-vim" "youcompleteme" ]; }
-    { names = [ "gist-vim" "webapi-vim" ]; }
-    { names = [ "polyglot" "colors-solarized" ]; }
-    { names = [ "python-mode" ]; }
-  ];
+      nnoremap // :nohlsearch<CR>
 
-  programs.vim.vimConfig =  ''
-    colorscheme solarized
-    set bg=dark
+      let mapleader = ' '
 
-    set clipboard=unnamed
-    set relativenumber
+      " fzf
+      nnoremap <Leader>p :FZF<CR>
 
-    set backup
-    set backupdir=~/.vim/tmp/backup//
-    set backupskip=/tmp/*,/private/tmp/*
-    set directory=~/.vim/tmp/swap/
-    set noswapfile
-    set undodir=~/.vim/tmp/undo//
-    set undofile
+      " vim-surround
+      vmap s S
 
-    if !isdirectory(expand(&undodir))
-      call mkdir(expand(&undodir), "p")
-    endif
-    if !isdirectory(expand(&backupdir))
-      call mkdir(expand(&backupdir), "p")
-    endif
-    if !isdirectory(expand(&directory))
-      call mkdir(expand(&directory), "p")
-    endif
+      " youcompleteme
+      let g:ycm_seed_identifiers_with_syntax = 1
+    '';
+  };
 
-    vmap s S
-
-    inoremap <C-g> <Esc><CR>
-    vnoremap <C-g> <Esc><CR>
-    cnoremap <C-g> <Esc><CR>
-
-    cnoremap %% <C-r>=expand('%:h') . '/'<CR>
-
-    let mapleader = ' '
-    nnoremap <Leader>( :tabprevious<CR>
-    nnoremap <Leader>) :tabnext<CR>
-
-    nnoremap <Leader>! :Dispatch!<CR>
-    nnoremap <Leader>p :FZF<CR>
-    nnoremap <silent> <Leader>e :exe 'FZF ' . expand('%:h')<CR>
-
-    nmap <leader><tab> <plug>(fzf-maps-n)
-    xmap <leader><tab> <plug>(fzf-maps-x)
-    omap <leader><tab> <plug>(fzf-maps-o)
-    imap <c-x><c-w> <plug>(fzf-complete-word)
-
-    command! -bang -nargs=* Ag call fzf#vim#ag(<q-args>,
-          \   <bang>0 ? fzf#vim#with_preview('up:30%')
-          \   : fzf#vim#with_preview('right:50%:hidden', '?'),
-          \   <bang>0)
-
-    command! -bang -nargs=* Rg call fzf#vim#grep(
-          \   'rg --column --line-number --no-heading --color=always '.shellescape(<q-args>), 1,
-          \   <bang>0 ? fzf#vim#with_preview('up:30%')
-          \           : fzf#vim#with_preview('right:50%:hidden', '?'),
-          \   <bang>0)
-
-    highlight clear SignColumn
-
-    let g:is_bash=1
-
-    let g:ale_sign_error = '⨉'
-    let g:ale_sign_warning = '⚠'
-    let g:ale_virtualenv_dir_names = ['venv']
-
-    " let g:ycm_add_preview_to_completeopt = 1
-    let g:ycm_autoclose_preview_window_after_completion = 1
-    let g:ycm_autoclose_preview_window_after_insertion = 1
-
-    let g:ycm_seed_identifiers_with_syntax = 1
-    let g:ycm_semantic_triggers = {}
-
-    nmap <Leader>D :YcmCompleter GetDoc<CR>
-    nmap <Leader>d :YcmCompleter GoToDefinition<CR>
-    nmap <Leader>r :YcmCompleter GoToReferences<CR>
-
-    let g:pymode_folding = 0
-    let g:pymode_lint = 0
-    let g:pymode_options_colorcolumn = 0
-    let g:pymode_options_max_line_length = 120
-    let g:pymode_rope_complete_on_dot = 0
-    let g:pymode_rope_regenerate_on_write = 0
-  '';
+  # Dotfiles.
+  # programs.vim.package = mkForce pkgs.lnl.vim;
 
   programs.zsh.enable = true;
   programs.zsh.enableBashCompletion = true;
@@ -199,23 +152,74 @@
 
   programs.zsh.variables.cfg = "$HOME/.config/nixpkgs/darwin/configuration.nix";
   programs.zsh.variables.darwin = "$HOME/.nix-defexpr/darwin";
-  programs.zsh.variables.pkgs = "$HOME/.nix-defexpr/nixpkgs";
+  programs.zsh.variables.nixpkgs = "$HOME/.nix-defexpr/nixpkgs";
 
 
   programs.zsh.promptInit = ''
     autoload -U promptinit && promptinit
 
-    if [ -n "$IN_NIX_SHELL" ]; then
-        PS1='%F{green}%B[nix-shell]%#%b%f '
-    else
-        PS1='%B%(?..%? )%b⇒ '
-    fi
-    RPS1='%F{green}%~%f'
+    setopt PROMPTSUBST
+
+    _prompt_nix() {
+      [ -z "$IN_NIX_SHELL" ] || echo "%F{yellow}%B[''${name:+$name}]%b%f "
+    }
+
+    PS1='%F{red}%B%(?..%? )%b%f%# '
+    RPS1='$(_prompt_nix)%F{green}%~%f'
   '';
 
   programs.zsh.loginShellInit = ''
-    n() {
-        nix-repl '<nixpkgs/lib>' ''${@:-<nixpkgs>}
+    :a() {
+        nix repl ''${@:-<darwinpkgs>}
+    }
+
+    :u() {
+        nix run -f '<darwinpkgs>' "$@"
+    }
+
+    :d() {
+        if [ -z "$IN_NIX_SHELL" ]; then
+            eval "$(direnv hook zsh)"
+        else
+            direnv reload
+        fi
+    }
+
+    xi() {
+        curl -F 'f:1=<-' ix.io
+    }
+
+    install_name_tool() {
+        ${pkgs.darwin.cctools}/bin/install_name_tool "$@"
+    }
+
+    nm() {
+        ${pkgs.darwin.cctools}/bin/nm "$@"
+    }
+
+    otool() {
+        ${pkgs.darwin.cctools}/bin/otool "$@"
+    }
+
+    aarch-build() {
+        nix-build --option system aarch64-linux --store ssh-ng://aarch1 "$@"
+    }
+
+    arm-build() {
+        nix-build --option system armv7l-linux --store ssh-ng://arm1 "$@"
+    }
+
+    darwin-build() {
+        nix-build --option system x86_64-darwin --store ssh-ng://mac1 "$@"
+    }
+
+    linux-build() {
+        nix-build --option system x86_64-linux --store ssh-ng://nixos1 "$@"
+    }
+
+    hydra-bad-machines() {
+        local url=https://hydra.nixos.org
+        curl -fsSL -H 'Accept: application/json' $url/queue-runner-status | jq -r '.machines | to_entries | .[] | select(.value.consecutiveFailures>0) | .key'
     }
 
     hydra-job-revision() {
@@ -286,7 +290,7 @@
         unset __ETC_ZSHENV_SOURCED
         unset __ETC_ZPROFILE_SOURCED
         host=$(hostname -s | awk -F'-' '{print tolower($NF)}')
-        exec tmux new-session -A -s $host
+        exec tmux new-session -A -s "$host" "$@"
     }
   '';
 
@@ -301,20 +305,30 @@
     zle -N up-line-or-beginning-search
   '';
 
-  environment.variables.FZF_DEFAULT_COMMAND = "ag -l -f -g ''";
-  environment.variables.SHELLCHECK_OPTS = "-e SC1008";
+  environment.variables.LANG = "en_US.UTF-8";
 
+  environment.shellAliases.e = "$EDITOR";
   environment.shellAliases.g = "git log --pretty=color -32";
   environment.shellAliases.gb = "git branch";
   environment.shellAliases.gc = "git checkout";
   environment.shellAliases.gcb = "git checkout -B";
   environment.shellAliases.gd = "git diff --minimal --patch";
   environment.shellAliases.gf = "git fetch";
-  environment.shellAliases.gl = "git log --pretty=color --graph";
-  environment.shellAliases.glog = "git log --pretty=nocolor";
+  environment.shellAliases.gg = "git log --pretty=color --graph";
+  environment.shellAliases.gl = "git log --pretty=nocolor";
   environment.shellAliases.grh = "git reset --hard";
   environment.shellAliases.l = "ls -lh";
-  environment.shellAliases.ls = "ls -G";
+
+  environment.extraInit = ''
+    # Load and export variables from environment.d.
+    if [ -d /etc/environment.d ]; then
+        set -a
+        . /etc/environment.d/*
+        set +a
+    fi
+  '';
+
+  environment.darwinConfig = "$HOME/.config/nixpkgs/darwin/configuration.nix";
 
   nix.nixPath =
     [ # Use local nixpkgs checkout instead of channels.
@@ -322,298 +336,84 @@
       "darwin=$HOME/.nix-defexpr/darwin"
       "nixpkgs=$HOME/.nix-defexpr/nixpkgs"
       "$HOME/.nix-defexpr/channels"
+      "$HOME/.nix-defexpr"
     ];
 
   nixpkgs.config.allowUnfree = true;
 
-  nixpkgs.config.packageOverrides = super: let self = super.pkgs; in {
-  };
+  nixpkgs.overlays = [
+    (self: super: {
+      darwin-zsh-completions = super.runCommandNoCC "darwin-zsh-completions-0.0.0"
+        { preferLocalBuild = true; }
+        ''
+          mkdir -p $out/share/zsh/site-functions
 
-  # TODO: add module for per-user config, etc, ...
-  system.activationScripts.extraUserActivation.text = "ln -sfn /etc/per-user/lnl/gitconfig ~/.gitconfig";
+          cat <<-'EOF' > $out/share/zsh/site-functions/_darwin-rebuild
+          #compdef darwin-rebuild
+          #autoload
 
-  environment.etc."per-user/lnl/gitconfig".text = ''
-    [include]
-      path = .gitconfig.local
+          _nix-common-options
 
-    [core]
-      excludesfile = ~/.gitignore
-      autocrlf     = input
+          local -a _1st_arguments
+          _1st_arguments=(
+            'switch:Build, activate, and update the current generation'\
+            'build:Build without activating or updating the current generation'\
+            'check:Build and run the activation sanity checks'\
+            'changelog:Show most recent entries in the changelog'\
+          )
 
-    [color]
-      ui = auto
+          _arguments \
+            '--list-generations[Print a list of all generations in the active profile]'\
+            '--rollback[Roll back to the previous configuration]'\
+            {--switch-generation,-G}'[Activate specified generation]'\
+            '(--profile-name -p)'{--profile-name,-p}'[Profile to use to track current and previous system configurations]:Profile:_nix_profiles'\
+            '1:: :->subcmds' && return 0
 
-    [pretty]
-      color = format:%C(yellow)%h%Cblue%d%Creset %s %C(white)  %an, %ar%Creset
-      nocolor = format:%h%d %s   %an, %ar
+          case $state in
+            subcmds)
+              _describe -t commands 'darwin-rebuild subcommands' _1st_arguments
+            ;;
+          esac
+          EOF
+        '';
 
-    [user]
-      name = Daiderd Jordan
+      # Fake package, not in nixpkgs.
+      chunkwm = super.runCommandNoCC "chunkwm-0.0.0" {} ''
+        mkdir $out
+      '';
 
-    [github]
-      user = LnL7
-  '';
+      vim_configurable = super.vim_configurable.override {
+        guiSupport = "no";
+      };
+    })
+  ];
+
+  # Dotfiles.
+  # nixpkgs.overlays = mkAfter [ (import <dotpkgs/overlays/50-trivial-packages.nix>) ];
 
   services.khd.khdConfig = ''
-    # remap left-control h/j/k/l -> arrow keys
-    lctrl - h         [Safari]      :   khd -p "- left"
-    lctrl - j         [Safari]      :   khd -p "- down"
-    lctrl - k         [Safari]      :   khd -p "- up"
-    lctrl - l         [Safari]      :   khd -p "- right"
-
-    shift + lctrl - h [Safari]      :   khd -p "shift - left"
-    shift + lctrl - j [Safari]      :   khd -p "shift - down"
-    shift + lctrl - k [Safari]      :   khd -p "shift - up"
-    shift + lctrl - l [Safari]      :   khd -p "shift - right"
-
-    # remap left-control a / e   -> start / end of line
-    lctrl - a         [Safari]      :   khd -p "cmd - left"
-    lctrl - e         [Safari]      :   khd -p "cmd - right"
-
-    shift + lctrl - e [Safari]      :   khd -p "shift + cmd - left"
-    shift + lctrl - e [Safari]      :   khd -p "shift + cmd - right"
-
-    # remap left-control b / w   -> start / end of word
-    lctrl - b         [Safari]      :   khd -p "alt - left"
-    lctrl - w         [Safari]      :   khd -p "alt - right"
-
-    shift + lctrl - b [Safari]      :   khd -p "shift + alt - left"
-    shift + lctrl - w [Safari]      :   khd -p "shift + alt - right"
-
-    # remap left-control u / d   -> page up / page down
-    lctrl - u         [Safari]      :   khd -p "alt - up"
-    lctrl - d         [Safari]      :   khd -p "alt - down"
-
-    shift + lctrl - u [Safari]      :   khd -p "shift + alt - up"
-    shift + lctrl - d [Safari]      :   khd -p "shift + alt - down"
-
-    # remap left-control x       -> forward delete
-    lctrl - x         [Safari]      :   khd -p "- delete"
-
-    # remap left-control g       -> escape
-    lctrl - g         [Safari]      :   khd -p "0x35"
-
-
     # modifier only mappings
     khd mod_trigger_timeout 0.2
-    lctrl    :   khd -p "0x35"
-    lshift   :   khd -p "shift - 9"
-    rshift   :   khd -p "shift - 0"
-
-
-    # set border color for different modes
-    khd mode default on_enter kwmc config border focused color 0x00000000
-    khd mode switcher on_enter kwmc config border focused color 0xddbdd322
-    khd mode scratchpad on_enter kwmc config border focused color 0xddd75f5f
-    khd mode swap on_enter kwmc config border focused color 0xdd458588
-    khd mode tree on_enter kwmc config border focused color 0xddfabd2f
-    khd mode space on_enter kwmc config border focused color 0xddb16286
-    khd mode info on_enter kwmc config border focused color 0xddcd950c
-
-
-    # toggle between modes
-    alt - f                 :   khd -e "mode activate switcher"
-    switcher + alt - f      :   khd -e "mode activate default"
-    swap + alt - f          :   khd -e "mode activate switcher"
-    space + alt - f         :   khd -e "mode activate switcher"
-    tree + alt - f          :   khd -e "mode activate switcher"
-    info + alt - f          :   khd -e "mode activate switcher"
-    scratchpad + alt - f    :   khd -e "mode activate switcher"
-
-    switcher + alt - g      :   khd -e "mode activate default"
-    swap + alt - g          :   khd -e "mode activate default"
-    space + alt - g         :   khd -e "mode activate default"
-    tree + alt - g          :   khd -e "mode activate default"
-    info + alt - g          :   khd -e "mode activate default"
-    scratchpad + alt - g    :   khd -e "mode activate default"
-    switcher + ctrl - g     :   khd -e "mode activate default"
-    swap + ctrl - g         :   khd -e "mode activate default"
-    space + ctrl - g        :   khd -e "mode activate default"
-    tree + ctrl - g         :   khd -e "mode activate default"
-    info + ctrl - g         :   khd -e "mode activate default"
-    scratchpad + ctrl - g   :   khd -e "mode activate default"
-    switcher - 0x35         :   khd -e "mode activate default"
-    swap - 0x35             :   khd -e "mode activate default"
-    space - 0x35            :   khd -e "mode activate default"
-    tree - 0x35             :   khd -e "mode activate default"
-    info - 0x35             :   khd -e "mode activate default"
-    scratchpad - 0x35       :   khd -e "mode activate default"
-
-    switcher - w            :   khd -e "mode activate scratchpad"
-    switcher - a            :   khd -e "mode activate swap"
-    switcher - s            :   khd -e "mode activate space"
-    switcher - d            :   khd -e "mode activate tree"
-    switcher - q            :   khd -e "mode activate info"
-
-
-    # switcher mode
-    switcher + shift - r    :   killall kwm;\
-                                khd -e "reload";\
-                                khd -e "mode activate default"
-
-    switcher - return       :   open -na /Applications/iTerm2.app;\
-                                khd -e "mode activate default"
-
-    switcher - h            :   kwmc window -f west
-    switcher - l            :   kwmc window -f east
-    switcher - j            :   kwmc window -f south
-    switcher - k            :   kwmc window -f north
-    switcher - n            :   kwmc window -fm prev
-    switcher - m            :   kwmc window -fm next
-
-    switcher - 1            :   kwmc space -fExperimental 1
-    switcher - 2            :   kwmc space -fExperimental 2
-    switcher - 3            :   kwmc space -fExperimental 3
-    switcher - 4            :   kwmc space -fExperimental 4
-    switcher - 5            :   kwmc space -fExperimental 5
-    switcher - 6            :   kwmc space -fExperimental 6
-
-    switcher + shift - 1    :   kwmc display -f 0
-    switcher + shift - 2    :   kwmc display -f 1
-    switcher + shift - 3    :   kwmc display -f 2
-
-
-    scratchpad - a          :   kwmc scratchpad add
-    scratchpad - s          :   kwmc scratchpad toggle 0
-    scratchpad - d          :   kwmc scratchpad remove
-
-    scratchpad - 1          :   kwmc scratchpad toggle 1
-    scratchpad - 2          :   kwmc scratchpad toggle 2
-    scratchpad - 3          :   kwmc scratchpad toggle 3
-    scratchpad - 4          :   kwmc scratchpad toggle 4
-    scratchpad - 5          :   kwmc scratchpad toggle 5
-    scratchpad - 6          :   kwmc scratchpad toggle 6
-
-
-    # swap mode
-    swap - h                :   kwmc window -s west
-    swap - j                :   kwmc window -s south
-    swap - k                :   kwmc window -s north
-    swap - l                :   kwmc window -s east
-    swap - m                :   kwmc window -s mark
-
-    swap + shift - k        :   kwmc window -m north
-    swap + shift - l        :   kwmc window -m east
-    swap + shift - j        :   kwmc window -m south
-    swap + shift - h        :   kwmc window -m west
-    swap + shift - m        :   kwmc window -m mark
-
-    swap - 1                :   kwmc window -m space 1
-    swap - 2                :   kwmc window -m space 2
-    swap - 3                :   kwmc window -m space 3
-    swap - 4                :   kwmc window -m space 4
-    swap - 5                :   kwmc window -m space 5
-
-    swap - z                :   kwmc window -m space left
-    swap - c                :   kwmc window -m space right
-
-    swap + shift - 1        :   kwmc window -m display 0
-    swap + shift - 2        :   kwmc window -m display 1
-    swap + shift - 3        :   kwmc window -m display 2
-
-
-    # space mode
-    space - a               :   kwmc space -t bsp
-    space - s               :   kwmc space -t monocle
-    space - d               :   kwmc space -t float
-
-    space - x               :   kwmc space -g increase horizontal
-    space - y               :   kwmc space -g increase vertical
-
-    space + shift - x       :   kwmc space -g decrease horizontal
-    space + shift - y       :   kwmc space -g decrease vertical
-
-    space - left            :   kwmc space -p increase left
-    space - right           :   kwmc space -p increase right
-    space - up              :   kwmc space -p increase top
-    space - down            :   kwmc space -p increase bottom
-    space - p               :   kwmc space -p increase all
-
-    space + shift - left    :   kwmc space -p decrease left
-    space + shift - right   :   kwmc space -p decrease right
-    space + shift - up      :   kwmc space -p decrease top
-    space + shift - down    :   kwmc space -p decrease bottom
-    space + shift - p       :   kwmc space -p decrease all
-
-
-    # tree mode
-    tree - a                :   kwmc window -c type bsp
-    tree - s                :   kwmc window -c type monocle
-    tree - f                :   kwmc window -z fullscreen
-    tree - d                :   kwmc window -z parent
-    tree - w                :   kwmc window -t focused
-    tree - r                :   kwmc tree rotate 90
-
-    tree - q                :   kwmc window -c split - mode toggle;\
-                                khd -e "mode activate default"
-
-    tree - c                :   kwmc window -c type toggle;\
-                                khd -e "mode activate default"
-
-    tree - h                :   kwmc window -c expand 0.05 west
-    tree - j                :   kwmc window -c expand 0.05 south
-    tree - k                :   kwmc window -c expand 0.05 north
-    tree - l                :   kwmc window -c expand 0.05 east
-    tree + shift - h        :   kwmc window -c reduce 0.05 west
-    tree + shift - j        :   kwmc window -c reduce 0.05 south
-    tree + shift - k        :   kwmc window -c reduce 0.05 north
-    tree + shift - l        :   kwmc window -c reduce 0.05 east
-
-    tree - p                :   kwmc tree -pseudo create
-    tree + shift - p        :   kwmc tree -pseudo destroy
-
-    tree - o                :   kwmc window -s prev
-    tree + shift - o        :   kwmc window -s next
+    lctrl  : qes -k "escape"
+    lshift : qes -t "("
+    rshift : qes -t ")"
   '';
 
-  services.kwm.kwmConfig = ''
-    kwmc config tiling bsp
-    kwmc config split-ratio 0.5
-    kwmc config spawn left
-
-
-    kwmc config padding 28 0 2 0
-    kwmc config gap 4 4
-    kwmc config display 1 padding 40 20 20 20
-    kwmc config display 1 gap 10 10
-    kwmc config display 2 padding 40 20 20 20
-    kwmc config display 2 gap 10 10
-
-    kwmc config space 0 1 name main
-    kwmc config space 0 2 name rnd
-    kwmc config space 0 2 mode monocle
-    kwmc config space 0 3 name web
-    kwmc config space 1 1 name dev
-    kwmc config space 1 1 mode monocle
-    kwmc config space 2 1 name var
-
-
-    kwmc config focus-follows-mouse on
-    kwmc config mouse-follows-focus on
-    kwmc config standby-on-float on
-    kwmc config center-on-float on
-    kwmc config float-non-resizable on
-    kwmc config lock-to-container on
-    kwmc config cycle-focus on
-    kwmc config optimal-ratio 1.605
-
-    kwmc config border focused on
-    kwmc config border focused size 2
-    kwmc config border focused color 0x00000000
-    kwmc config border focused radius 6
-
-    kwmc config border marked on
-    kwmc config border marked size 2
-    kwmc config border marked color 0xDD7f7f7f
-    kwmc config border marked radius 6
-
-    kwmc rule owner="Airmail" properties={float="true"}
-    kwmc rule owner="Apple Store" properties={float="true"}
-    kwmc rule owner="Info" properties={float="true"}
-    kwmc rule owner="System Preferences" properties={float="true"}
-    kwmc rule owner="iTerm2" properties={role="AXDialog"}
-    kwmc rule owner="iTunes" properties={float="true"}
+  services.chunkwm.package = pkgs.chunkwm;
+  services.chunkwm.hotload = false;
+  services.chunkwm.plugins.dir = "${lib.getOutput "out" pkgs.chunkwm}/lib/chunkwm/plugins";
+  services.chunkwm.plugins.list = [ "ffm" "tiling" ];
+  services.chunkwm.plugins."tiling".config = ''
+    chunkc set global_desktop_mode   bsp
   '';
+
+  # Dotfiles.
+  # services.chunkwm.extraConfig = builtins.readFile <dotfiles/chunkwm/chunkwmrc>;
+  # services.skhd.skhdConfig = builtins.readFile <dotfiles/skhd/skhdrc>;
+
+  # TODO: add module for per-user config, etc, ...
+  # environment.etc."per-user/lnl/gitconfig".text = builtins.readFile <dotfiles/git/gitconfig>;
+  system.activationScripts.extraUserActivation.text = "ln -sfn /etc/per-user/lnl/gitconfig ~/.gitconfig";
 
   # You should generally set this to the total number of logical cores in your system.
   # $ sysctl -n hw.ncpu

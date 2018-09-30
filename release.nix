@@ -59,7 +59,7 @@ let
 
   packageSet = {
     inherit (pkgs)
-      stdenv bash zsh nix nix-repl
+      stdenv bash zsh nix
       tmux reattach-to-user-namespace
       nano emacs vim;
   };
@@ -73,7 +73,6 @@ let
           jobs.bash.x86_64-darwin
           jobs.zsh.x86_64-darwin
           jobs.nix.x86_64-darwin
-          jobs.nix-repl.x86_64-darwin
           jobs.reattach-to-user-namespace.x86_64-darwin
           jobs.tmux.x86_64-darwin
           jobs.nano.x86_64-darwin
@@ -96,8 +95,18 @@ let
     tests.networking-hostname = makeTest ./tests/networking-hostname.nix;
     tests.networking-networkservices = makeTest ./tests/networking-networkservices.nix;
     tests.nixpkgs-overlays = makeTest ./tests/nixpkgs-overlays.nix;
+    tests.programs-ssh = makeTest ./tests/programs-ssh.nix;
     tests.programs-zsh = makeTest ./tests/programs-zsh.nix;
     tests.services-activate-system = makeTest ./tests/services-activate-system.nix;
+    tests.services-buildkite-agent = makeTest ./tests/services-buildkite-agent.nix;
+    tests.services-nix-daemon = makeTest ./tests/services-nix-daemon.nix;
+    tests.sockets-nix-daemon = makeTest ./tests/sockets-nix-daemon.nix;
+    tests.services-ofborg = makeTest ./tests/services-ofborg.nix;
+    tests.services-offlineimap = makeTest ./tests/services-offlineimap.nix;
+    tests.services-skhd = makeTest ./tests/services-skhd.nix;
+    tests.services-synapse-bt = makeTest ./tests/services-synapse-bt.nix;
+    tests.services-synergy = makeTest ./tests/services-synergy.nix;
+    tests.services-privoxy = makeTest ./tests/services-privoxy.nix;
     tests.system-defaults-write = makeTest ./tests/system-defaults-write.nix;
     tests.system-keyboard-mapping = makeTest ./tests/system-keyboard-mapping.nix;
     tests.system-packages = makeTest ./tests/system-packages.nix;
@@ -105,7 +114,6 @@ let
     tests.system-path-fish = makeTest ./tests/system-path-fish.nix;
     tests.system-shells = makeTest ./tests/system-shells.nix;
     tests.users-groups = makeTest ./tests/users-groups.nix;
-    tests.buildkite-agent = makeTest ./tests/buildkite-agent.nix;
 
   }
   // (mapTestOn (packagePlatforms packageSet));

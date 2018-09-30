@@ -14,6 +14,12 @@ in
       description = "Whether to enable the nix-daemon service.";
     };
 
+    services.nix-daemon.enableSocketListener = mkOption {
+      type = types.bool;
+      default = false;
+      description = "Whether to make the nix-daemon service socket activated.";
+    };
+
     services.nix-daemon.logFile = mkOption {
       type = types.nullOr types.path;
       default = null;
@@ -39,16 +45,25 @@ in
 
     launchd.daemons.nix-daemon = {
       command = "${config.nix.package}/bin/nix-daemon";
-      serviceConfig.KeepAlive = true;
       serviceConfig.ProcessType = "Interactive";
       serviceConfig.LowPriorityIO = config.nix.daemonIONice;
       serviceConfig.Nice = config.nix.daemonNiceLevel;
       serviceConfig.SoftResourceLimits.NumberOfFiles = 4096;
       serviceConfig.StandardErrorPath = cfg.logFile;
 
-      serviceConfig.EnvironmentVariables = config.nix.envVars
-        // { NIX_SSL_CERT_FILE = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"; }
-        // optionalAttrs (cfg.tempDir != null) { TMPDIR = cfg.tempDir; };
+      serviceConfig.KeepAlive = mkIf (!cfg.enableSocketListener) true;
+
+      serviceConfig.Sockets = mkIf cfg.enableSocketListener
+        { Listeners.SockType = "stream";
+          Listeners.SockPathName = "/nix/var/nix/daemon-socket/socket";
+        };
+
+      serviceConfig.EnvironmentVariables = mkMerge [
+        config.nix.envVars
+        { NIX_SSL_CERT_FILE = mkDefault "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
+          TMPDIR = mkIf (cfg.tempDir != null) cfg.tempDir;
+        }
+      ];
     };
 
   };

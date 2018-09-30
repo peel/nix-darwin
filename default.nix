@@ -43,6 +43,7 @@ let
         ./modules/nix/nix-info.nix
         ./modules/nix/nixpkgs.nix
         ./modules/environment
+        ./modules/fonts
         ./modules/launchd
         ./modules/services/activate-system
         ./modules/services/buildkite-agent.nix
@@ -50,19 +51,25 @@ let
         ./modules/services/emacs.nix
         ./modules/services/khd
         ./modules/services/kwm
+        ./modules/services/mail/offlineimap.nix
         ./modules/services/mopidy.nix
         ./modules/services/nix-daemon.nix
         ./modules/services/nix-gc
         ./modules/services/ofborg
         ./modules/services/postgresql
+        ./modules/services/privoxy
         ./modules/services/redis
         ./modules/services/skhd
+        ./modules/services/synapse-bt.nix
+        ./modules/services/synergy
         ./modules/programs/bash
         ./modules/programs/fish.nix
+        ./modules/programs/gnupg.nix
         ./modules/programs/man.nix
         ./modules/programs/info
         ./modules/programs/nix-index
         ./modules/programs/nix-script.nix
+        ./modules/programs/ssh
         ./modules/programs/tmux.nix
         ./modules/programs/vim.nix
         ./modules/programs/zsh

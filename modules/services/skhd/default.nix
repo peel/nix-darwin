@@ -4,9 +4,9 @@ with lib;
 
 let
   cfg = config.services.skhd;
+in
 
-in {
-
+{
   options = {
     services.skhd.enable = mkOption {
       type = types.bool;
@@ -16,7 +16,7 @@ in {
 
     services.skhd.package = mkOption {
       type = types.package;
-      example = literalExample "pkgs.skhd";
+      default = pkgs.skhd;
       description = "This option specifies the skhd package to use.";
     };
 
@@ -33,14 +33,12 @@ in {
     environment.etc."skhdrc".text = cfg.skhdConfig;
 
     launchd.user.agents.skhd = {
-      path = [ cfg.package config.environment.systemPath ];
+      path = [ config.environment.systemPath ];
 
       serviceConfig.ProgramArguments = [ "${cfg.package}/bin/skhd" ]
         ++ optionals (cfg.skhdConfig != "") [ "-c" "/etc/skhdrc" ];
       serviceConfig.KeepAlive = true;
       serviceConfig.ProcessType = "Interactive";
-      serviceConfig.StandardOutPath = "/tmp/skhd.out";
-      serviceConfig.StandardErrorPath = "/tmp/skhd.err";
     };
 
   };

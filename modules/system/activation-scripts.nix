@@ -40,7 +40,7 @@ in
       #! ${stdenv.shell}
       set -e
       set -o pipefail
-      export PATH=${pkgs.coreutils}/bin:@out@/sw/bin:${config.environment.systemPath}
+      export PATH="${pkgs.gnugrep}/bin:${pkgs.coreutils}/bin:@out@/sw/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 
       systemConfig=@out@
 
@@ -64,6 +64,7 @@ in
       ${cfg.activationScripts.time.text}
       ${cfg.activationScripts.networking.text}
       ${cfg.activationScripts.keyboard.text}
+      ${cfg.activationScripts.fonts.text}
 
       ${cfg.activationScripts.postActivation.text}
 
@@ -83,7 +84,7 @@ in
       #! ${stdenv.shell}
       set -e
       set -o pipefail
-      export PATH=${pkgs.coreutils}/bin:@out@/sw/bin:${config.environment.systemPath}
+      export PATH="${pkgs.gnugrep}/bin:${pkgs.coreutils}/bin:@out@/sw/bin:/usr/bin:/bin"
 
       systemConfig=@out@
 

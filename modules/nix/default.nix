@@ -5,10 +5,7 @@ with lib;
 let
   cfg = config.nix;
 
-  nixVersionAtLeast = versionAtLeast (cfg.package.version or "<unknown>");
-
-  buildHook = if nixVersionAtLeast "1.12pre"
-    then "build-remote" else "build-remote.pl";
+  isNix20 = versionAtLeast (cfg.version or "<unknown>") "1.12pre";
 
   nixConf =
     let
@@ -28,20 +25,25 @@ let
           ${optionalString config.services.nix-daemon.enable ''
             build-users-group = nixbld
           ''}
-          build-max-jobs = ${toString cfg.maxJobs}
-          build-cores = ${toString cfg.buildCores}
-          build-use-sandbox = ${if (builtins.isBool cfg.useSandbox) then (if cfg.useSandbox then "true" else "false") else cfg.useSandbox}
+          ${if isNix20 then "max-jobs" else "build-max-jobs"} = ${toString (cfg.maxJobs)}
+          ${if isNix20 then "cores" else "build-cores"} = ${toString (cfg.buildCores)}
+          ${if isNix20 then "sandbox" else "build-use-sandbox"} = ${if (builtins.isBool cfg.useSandbox) then boolToString cfg.useSandbox else cfg.useSandbox}
           ${optionalString (cfg.sandboxPaths != []) ''
-            build-sandbox-paths = ${toString cfg.sandboxPaths}
+            ${if isNix20 then "extra-sandbox-paths" else "build-sandbox-paths"} = ${toString cfg.sandboxPaths}
           ''}
-          binary-caches = ${toString cfg.binaryCaches}
-          trusted-binary-caches = ${toString cfg.trustedBinaryCaches}
-          binary-cache-public-keys = ${toString cfg.binaryCachePublicKeys}
-          ${optionalString cfg.requireSignedBinaryCaches ''
-            signed-binary-caches = *
+          ${if isNix20 then "substituters" else "binary-caches"} = ${toString cfg.binaryCaches}
+          ${if isNix20 then "trusted-substituters" else "trusted-binary-caches"} = ${toString cfg.trustedBinaryCaches}
+          ${if isNix20 then "trusted-public-keys" else "binary-cache-public-keys"} = ${toString cfg.binaryCachePublicKeys}
+          ${if isNix20 then ''
+            require-sigs = ${if cfg.requireSignedBinaryCaches then "true" else "false"}
+          '' else ''
+            signed-binary-caches = ${if cfg.requireSignedBinaryCaches then "*" else ""}
           ''}
           trusted-users = ${toString cfg.trustedUsers}
           allowed-users = ${toString cfg.allowedUsers}
+          ${optionalString (isNix20 && !cfg.distributedBuilds) ''
+            builders =
+          ''}
           $extraOptions
           END
         '';
@@ -51,11 +53,22 @@ in
   options = {
     nix.package = mkOption {
       type = types.either types.package types.path;
-      default = "/nix/var/nix/profiles/default";
-      example = "pkgs.nix";
+      default = pkgs.nix;
+      defaultText = "pkgs.nix";
+      example = literalExample "pkgs.nixUnstable";
       description = ''
         This option specifies the package or profile that contains the version of Nix to use throughout the system.
+        To keep the version of nix originally installed the default profile can be used.
+
+        eg. /nix/var/nix/profiles/default
       '';
+    };
+
+    nix.version = mkOption {
+      type = types.str;
+      default = "<unknown>";
+      example = "1.11.6";
+      description = "The version of nix. Used to determine what settings to configure in nix.conf";
     };
 
     nix.useDaemon = mkOption {
@@ -301,7 +314,7 @@ in
       type = types.listOf types.str;
       default =
         [ # Include default path <darwin-config>.
-          "darwin-config=$HOME/.nixpkgs/darwin-configuration.nix"
+          "darwin-config=${config.environment.darwinConfig}"
           "/nix/var/nix/profiles/per-user/root/channels"
           "$HOME/.nix-defexpr/channels"
         ];
@@ -320,8 +333,6 @@ in
       (mkIf (!cfg.distributedBuilds && cfg.buildMachines != []) "nix.distributedBuilds is not enabled, build machines won't be configured.")
     ];
 
-    nix.requireSignedBinaryCaches = mkIf (nixVersionAtLeast "2.0pre") false;
-
     nix.binaryCaches = mkAfter [ https://cache.nixos.org/ ];
     nix.binaryCachePublicKeys = mkAfter [ "cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY=" ];
 
@@ -330,6 +341,11 @@ in
         "darwin-config=$HOME/.nixpkgs/darwin-configuration.nix"
         "/nix/var/nix/profiles/per-user/root/channels"
       ]);
+
+    nix.package = mkIf (config.system.stateVersion < 3)
+      (mkDefault "/nix/var/nix/profiles/default");
+
+    nix.version = mkIf (isDerivation cfg.package) cfg.package.version or "<unknown>";
 
     environment.systemPackages = mkIf (isDerivation cfg.package)
       [ cfg.package ];
@@ -355,7 +371,8 @@ in
       };
 
     nix.envVars =
-      { NIX_CONF_DIR = "/etc/nix";
+      optionalAttrs (!isNix20) {
+        NIX_CONF_DIR = "/etc/nix";
 
         # Enable the copy-from-other-stores substituter, which allows
         # builds to be sped up by copying build results from remote
@@ -363,14 +380,15 @@ in
         # subdirectory of /run/nix/remote-stores.
         NIX_OTHER_STORES = "/run/nix/remote-stores/*/nix";
       }
-
       // optionalAttrs cfg.distributedBuilds {
-        NIX_BUILD_HOOK = "${cfg.package}/libexec/nix/${buildHook}";
-        NIX_REMOTE_SYSTEMS = "/etc/nix/machines";
         NIX_CURRENT_LOAD = "/run/nix/current-load";
+      }
+      // optionalAttrs (cfg.distributedBuilds && !isNix20) {
+        NIX_BUILD_HOOK = "${cfg.package}/libexec/nix/build-remote.pl";
+        NIX_REMOTE_SYSTEMS = "/etc/nix/machines";
       };
 
-    environment.extraInit = ''
+    environment.extraInit = optionalString (!isNix20) ''
       # Set up secure multi-user builds: non-root users build through the
       # Nix daemon.
       if [ ! -w /nix/var/nix/db ]; then

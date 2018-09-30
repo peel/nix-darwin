@@ -3,17 +3,7 @@
 with lib;
 
 let
-
   cfg = config.programs.vim;
-
-  vim = pkgs.vim_configurable.customize {
-    name = "vim";
-    vimrcConfig.customRC = config.environment.etc."vimrc".text;
-    vimrcConfig.vam = {
-      knownPlugins = pkgs.vimPlugins // cfg.extraKnownPlugins;
-      pluginDictionaries = cfg.plugins;
-    };
-  };
 
   text = import ../lib/write-text.nix {
     inherit lib;
@@ -21,25 +11,21 @@ let
   };
 
   vimOptions = concatMapStringsSep "\n" (attr: attr.text) (attrValues cfg.vimOptions);
+in
 
-in {
+{
   options = {
-
     programs.vim.enable = mkOption {
       type = types.bool;
       default = false;
-      description = ''
-        Whether to configure vim.
-      '';
+      description = "Whether to configure vim.";
     };
 
     programs.vim.enableSensible = mkOption {
       type = types.bool;
       default = false;
       example = true;
-      description = ''
-        Enable sensible configuration options for vim.
-      '';
+      description = "Enable sensible configuration options for vim.";
     };
 
     programs.vim.extraKnownPlugins = mkOption {
@@ -60,18 +46,19 @@ in {
           };
         }
         '';
-      description = ''
-        Custom plugin declarations to add to VAM's knownPlugins.
-      '';
+      description = "Custom plugin declarations to add to VAM's knownPlugins.";
     };
 
     programs.vim.plugins = mkOption {
       type = types.listOf types.attrs;
       default = [];
       example = [ { names = [ "surround" "vim-nix" ]; } ];
-      description = ''
-        VAM plugin dictionaries to use for vim_configurable.
-      '';
+      description = "VAM plugin dictionaries to use for vim_configurable.";
+    };
+
+    programs.vim.package = mkOption {
+      internal = true;
+      type = types.package;
     };
 
     programs.vim.vimOptions = mkOption {
@@ -83,21 +70,18 @@ in {
     programs.vim.vimConfig = mkOption {
       type = types.lines;
       default = "";
-      description = ''
-        Extra vimrcConfig to use for vim_configurable.
-      '';
+      description = "Extra vimrcConfig to use for vim_configurable.";
     };
-
   };
 
   config = mkIf cfg.enable {
 
     environment.systemPackages =
       [ # Include vim_configurable package.
-        vim
+        cfg.package
       ];
 
-    environment.variables.EDITOR = "${vim}/bin/vim";
+    environment.variables.EDITOR = "${cfg.package}/bin/vim";
 
     environment.etc."vimrc".text = ''
       ${vimOptions}
@@ -107,6 +91,15 @@ in {
         source /etc/vimrc.local
       endif
     '';
+
+    programs.vim.package = pkgs.vim_configurable.customize {
+      name = "vim";
+      vimrcConfig.customRC = config.environment.etc."vimrc".text;
+      vimrcConfig.vam = {
+        knownPlugins = pkgs.vimPlugins // cfg.extraKnownPlugins;
+        pluginDictionaries = cfg.plugins;
+      };
+    };
 
     programs.vim.plugins = mkIf cfg.enableSensible [
       { names = [ "fugitive" "surround" "vim-nix" ]; }
